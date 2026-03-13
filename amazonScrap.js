@@ -1,7 +1,6 @@
 const { chromium } = require("playwright");
-const xlsx = require("xlsx");
+const fs = require("fs");
 
-// ✏️ Añade aquí las URLs de los productos que quieres scrapear
 const URLS = [
   "https://www.amazon.es/dp/B0C7XHY6YS?ref_=MARS_NAVSTRIPE_desktop_echo_show_15&th=1",
   "https://www.amazon.es/PlusAcc-Dot-Bater%C3%ADa-generaci%C3%B3n-reproducci%C3%B3n/dp/B0C5JDNP2M/ref=pd_rhf_dp_s_pd_crcd_d_sccl_2_4/524-6130858-7168613?pd_rd_w=HaqiZ&content-id=amzn1.sym.fefa772b-6540-4186-be83-3322ed57acee&pf_rd_p=fefa772b-6540-4186-be83-3322ed57acee&pf_rd_r=EQZ9EAS32ZQYA8M50TFT&pd_rd_wg=8sw4B&pd_rd_r=16b568c5-6282-4585-b9d3-96e727759519&pd_rd_i=B0C5JDNP2M&th=1",
@@ -12,9 +11,18 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function toCSV(rows) {
+  const headers = ["ASIN", "Nombre", "Precio", "URL", "Fecha", "Hora"];
+  const lines = [headers.join(",")];
+  for (const row of rows) {
+    const values = headers.map(h => `"${(row[h] || "").replace(/"/g, '""')}"`);
+    lines.push(values.join(","));
+  }
+  return lines.join("\n");
+}
+
 async function getProductInfo(page, url) {
   try {
-    // Limpiar URL a formato limpio
     const asinMatch = url.match(/\/dp\/([A-Z0-9]{10})/);
     const asin = asinMatch ? asinMatch[1] : "Desconocido";
     if (asinMatch) url = `https://www.amazon.es/dp/${asin}`;
@@ -22,7 +30,6 @@ async function getProductInfo(page, url) {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await delay(2000);
 
-    // Aceptar cookies si aparece
     try {
       const cookieBtn = page.locator("#sp-cc-accept");
       if (await cookieBtn.isVisible({ timeout: 3000 })) {
@@ -85,12 +92,8 @@ async function main() {
 
   await browser.close();
 
-  const ws = xlsx.utils.json_to_sheet(results);
-  ws["!cols"] = [{ wch: 12 }, { wch: 80 }, { wch: 15 }, { wch: 60 }, { wch: 12 }, { wch: 10 }];
-  const wb = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(wb, ws, "Precios Amazon");
-  const filename = `precios_amazon_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  xlsx.writeFile(wb, filename);
+  const filename = `precios_amazon_${new Date().toISOString().slice(0, 10)}.csv`;
+  fs.writeFileSync(filename, toCSV(results), "utf8");
 
   console.log(`✅ Guardado: ${filename}`);
   console.log(`📊 Total: ${results.length} productos`);
